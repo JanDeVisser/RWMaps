@@ -11,9 +11,9 @@ com.sweattrails.PrettyMap = function (elt) {
     if (!this.elt) {
         return;
     }
-    this.url = this.elt.getAttribute('data-gpx-source');
     this.mapid = this.elt.getAttribute('data-map-target');
-    if (!this.url || !this.mapid) return;
+    if (!this.mapid) return;
+    elt.prettymap = this;
 
     this.map = L.map(this.mapid, {
         renderer: L.canvas(),
@@ -37,8 +37,8 @@ com.sweattrails.PrettyMap = function (elt) {
     this.control = L.control.layers({
             "openstreetmap": this.osm,
             "openstreetmap Cycle": this.osm_bike,
-            "Mapbox Dark": this.mapbox_dark,
-            "Mapbox Run Bike Hike": this.mapbox_rbh
+            "Mapbox Run Bike Hike": this.mapbox_rbh,
+            "Mapbox Dark": this.mapbox_dark
         }
         , null).addTo(this.map);
     this.gpx = null;
@@ -67,16 +67,12 @@ com.sweattrails.PrettyMap.prototype._c = function(c) {
 };
 
 com.sweattrails.PrettyMap.prototype.click = function(e) {
-    var layer = null;
-    var inputs = document.getElementById("iconChoices").getElementsByTagName("input");
-    for (var ix = 0; ix < inputs.length; ix++ ) {
-        var input = inputs.item(ix);
-        if (input.checked) {
-            layer = this._iconlayers[input.value];
-        }
-    }
+    const inputs = document.getElementById("iconChoices").getElementsByTagName("input");
+    const layer = Array.from(inputs).reduce((layer, input) => {
+        return (input.checked) ? this._iconlayers[input.value] : layer;
+    }, null);
     if (layer) {
-        var sz = (layer.size) ? layer.size : new L.point(32, 32);
+        const sz = (layer.size) ? layer.size : new L.point(32, 32);
         L.marker(e.latlng, {
             icon: new L.icon({iconUrl: layer.icon, iconSize: sz}),
             draggable: true
@@ -86,8 +82,17 @@ com.sweattrails.PrettyMap.prototype.click = function(e) {
 
 
 com.sweattrails.PrettyMap.prototype.displayGPX = function (onloaded) {
-    var _this = this;
-    var cb = onloaded;
+    this.fieldid = this.elt.getAttribute('data-gpx-source-field');
+    if (this.fieldid) {
+        const field = document.getElementById(this.fieldid);
+        if (field) {
+            this.url = field.value;
+        }
+    } else {
+        this.url = this.elt.getAttribute('data-gpx-source');
+    }
+    if (!this.url) return;
+
     this.gpx = new L.GPX(this.url, {
         async: true,
         marker_options: {
@@ -99,12 +104,12 @@ com.sweattrails.PrettyMap.prototype.displayGPX = function (onloaded) {
             weight: 5,
             color: '#4e95ff'
         }
-    }).on('loaded', function(e) {
-        var gpx = e.target;
-        _this.map.fitBounds(gpx.getBounds());
-        _this.control.addOverlay(gpx, gpx.get_name());
-        if (cb) {
-            cb(_this);
+    }).on('loaded', (e) => {
+        const gpx = e.target;
+        this.map.fitBounds(gpx.getBounds());
+        this.control.addOverlay(gpx, gpx.get_name());
+        if (onloaded) {
+            onloaded(this);
         }
     });
     this.gpx.addTo(this.map);
@@ -118,15 +123,14 @@ com.sweattrails.PrettyMap.prototype.elevation = function () {
     }
     this._elevation = new L.layerGroup().addTo(this.map);
     this.control.addOverlay(this._elevation, "Elevation Profile");
-    var bounds = this.map.getBounds();
-    var width = bounds.getEast() - bounds.getWest();
-    var height = bounds.getNorth() - bounds.getSouth();
-    var max_elev = this.gpx.get_elevation_max();
-    var min_elev = this.gpx.get_elevation_min();
-    var diff_elev = max_elev - min_elev;
-    var elev = this.gpx.get_elevation_data();
-    var y_scale = (height / 10) / diff_elev;
-    var x_scale = (0.9*width) / this.gpx.get_distance();
+    const bounds = this.map.getBounds();
+    const width = bounds.getEast() - bounds.getWest();
+    const height = bounds.getNorth() - bounds.getSouth();
+    const max_elev = this.gpx.get_elevation_max();
+    const min_elev = this.gpx.get_elevation_min();
+    const diff_elev = max_elev - min_elev;
+    const y_scale = (height / 10) / diff_elev;
+    const x_scale = (0.9*width) / this.gpx.get_distance();
 
     L.rectangle(
         [
@@ -135,22 +139,20 @@ com.sweattrails.PrettyMap.prototype.elevation = function () {
         ],
         { color: '#d1784c' }
     ).addTo(this._elevation);
-    var data = [];
-    for (var ix = 0; ix < elev.length; ix++) {
-        var point = elev[ix];
-        var x = (parseFloat(point[0])*1000)*x_scale;
-        var y = (parseFloat(point[1]) - min_elev) * y_scale;
-        console.log("ix: " + ix + " x: " + x, " y: " + y);
+    const data = this.gpx.get_elevation_data().reduce((data, point) => {
+        const x = (parseFloat(point[0])*1000)*x_scale;
+        const y = (parseFloat(point[1]) - min_elev) * y_scale;
+        console.log(`x: ${x} y: ${y} data: ${data}`);
         data.push([ bounds.getSouth() + height/20 + y, bounds.getWest() + width/20 + x ]);
-    }
+        return data;
+    }, []);
     L.polyline(data, { color: '#d1784c' }).addTo(this._elevation);
 };
 
 com.sweattrails.PrettyMap.prototype.renderImage  = function(images) {
-    var _ = this;
-    leafletImage(this.map, function(err, canvas) {
-        var img = document.createElement('img');
-        var dimensions = _.map.getSize();
+    leafletImage(this.map, (err, canvas) => {
+        const img = document.createElement('img');
+        const dimensions = this.map.getSize();
         img.width = dimensions.x / 2;
         img.height = dimensions.y / 2;
         img.src = canvas.toDataURL();
