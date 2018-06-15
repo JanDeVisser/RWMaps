@@ -31,7 +31,7 @@
 
 <html>
     <head>
-        <title>leaflet-gpx demo</title>
+        <title>RunWaterloo Pretty Map Maker</title>
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.0.3/leaflet.css" />
         <style type="text/css">
             body { width: 1000px; margin: 0 auto; }
@@ -60,7 +60,7 @@
                     <select id="gpxpicker">
                         <option value="">Select ...</option>
                         <?php
-                            $gpxfiles = '/home/jan/projects/RWMaps/public_html';
+                            $gpxfiles = pathinfo($_SERVER['SCRIPT_FILENAME'], PATHINFO_DIRNAME);
                             if (($_SERVER['REQUEST_METHOD'] == 'POST') && !is_null($_FILES['gpxfile'])) {
                                 $tmp = $_FILES['gpxfile']['tmp_name'];
                                 if (is_uploaded_file($tmp)) {
@@ -83,6 +83,7 @@
                             } else {
                                 $map = $_REQUEST['map'];
                             }
+
                             $d = dir($gpxfiles);
                             while (false !== ($entry = $d->read())) {
                                 $parts = pathinfo($entry);
